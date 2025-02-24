@@ -1,0 +1,29 @@
+{
+    "msize": 15,
+    "line_width": 10,
+    "gait_colors": {
+        "walk"  : "rgba(255,0,0,a)",
+        "trot"  : "rgba(0,0,255,a)",
+        "gallop": "rgba(0,255,0,a)",
+        "stay"  : "rgba(80,80,80,a)"
+    },
+    "mesh_color": "lightgray",
+    "mesh_alpha": 0.1,
+    "axis": ["x", "y", "z"],
+    "win_seconds": 1,
+    "cog_axis": {
+        "horse": {
+            "origin": [0.00, 0.00, 1.25],
+            "x": [-0.400, 1.500],
+            "y": [null, null],
+            "z": [0.750, 1.750]
+        },
+        "rider": {
+            "origin": [0.50, 0.00, 2.00],
+            "x": [0.100, null],
+            "y": [null, null],
+            "z": [1.500, 2.500]
+        },
+        "color": "black"
+    }
+}
