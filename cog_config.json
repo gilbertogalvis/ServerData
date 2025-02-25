@@ -1,6 +1,6 @@
 {
-    "msize": 15,
-    "line_width": 10,
+    "msize": 10,
+    "line_width": 5,
     "gait_colors": {
         "walk"  : "rgba(255,0,0,a)",
         "trot"  : "rgba(0,0,255,a)",
