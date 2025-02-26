@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoG 3D-Animation</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { margin: 0; }
+        #plot { width: 100vw; height: 90vh; }
+        #controls {
+            position: fixed;
+            bottom: 10px;
+            width: 100%;
+            background: white;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #slider-container {
+            width: 90%;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+        #slider {
+            width: 100%;
+        }
+        #ticks {
+            display: flex;
+            justify-content: space-between;
+            width: 90%;
+            position: absolute;
+            align-items: center;
+            bottom: -20px;
+            font-size: 12px;
+            color: gray;
+        }
+        #current-frame {
+            margin-left: 10px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        button {
+            margin: 5px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #popup-menu {
+            position: absolute;
+            /* top: 10px; */
+            /* right: 10px; */
+            bottom: 70px;
+            left: 10px;
+            background: black;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            display: none; /* Oculto por defecto */
+            z-index: 1000;
+        }
+        #popup-menu button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            text-align: left;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            cursor: pointer;
+        }
+        #popup-menu button:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div id="plot"></div>
+    <div id="controls">
+        <button id="menu-button">☰</button>
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+        <div id="slider-container">
+            <input type="range" id="slider" min="0" max="100" value="0">
+            <span id="current-frame">Frame: 0</span>
+            <div id="ticks"></div>
+        </div>
+    </div>
+    <div id="popup-menu">
+        <button id="speed-up">X++</button>
+        <button id="speed-ori">X==</button>
+        <button id="speed-down">X--</button>
+    </div>
+    <script>
+        // URLs de los archivos JSON
+        const mesh_url       = 'https://raw.githubusercontent.com/gilbertogalvis/ServerData/refs/heads/main/configs/mesh_data.json';
+        const cog_config_url = 'https://raw.githubusercontent.com/gilbertogalvis/ServerData/refs/heads/main/configs/cog_config.json';
+        const cog_data_url   = 'https://raw.githubusercontent.com/gilbertogalvis/ServerData/refs/heads/main/trainings/17299/v1/cog_data.json';
+
+        async function loadJson(url) {
+            const response = await fetch(url);
+            return response.ok ? await response.json() : console.error(`Error cargando ${url}`);
+        }
+
+        async function getTemplate(url, cog_config) {
+            try {
+                // Cargar los datos del archivo JSON
+                const data = await loadJson(url);
+                console.log("cog_config.mesh_alpha", cog_config.mesh_alpha)
+
+                // Crear y devolver el objeto mesh
+                const mesh = {
+                    type: 'mesh3d',
+                    x: data.x, y: data.y, z: data.z,
+                    // data.z.map(value => value + 2);
+
+                    i: data.faces.map(face => face[0]),
+                    j: data.faces.map(face => face[1]),
+                    k: data.faces.map(face => face[2]),
+
+                    color: cog_config.mesh_color,
+                    opacity: cog_config.mesh_alpha,
+
+                    flatshading :false,
+                    lighting: {
+                        ambient:0.8,
+                        diffuse:0.4,
+                        fresnel:0.4,
+                        specular:0.4,
+                    },
+
+                    name: 'horse_mesh',
+                    showlegend: false,
+                    hoverinfo: 'skip',
+                };
+
+                cog_axis = getCogAxis(data, cog_config);
+
+                // Crear trazas iniciales para Rider y Horse
+                const scatter_rider = {
+                    type: 'scatter3d',
+                    mode: 'lines+markers',
+                    x: [], y: [], z: [],
+                    showlegend: false,
+                    // marker: { size: 4, color: 'red' },
+                    // line: { width: cog_config.line_width }
+                };
+
+                const scatter_horse = {
+                    type: 'scatter3d',
+                    mode: 'lines+markers',
+                    x: [], y: [], z: [],
+                    showlegend: false,
+                    // marker: { size: 4, color: 'blue' },
+                    // line: { width: cog_config.line_width }
+                };
+
+                const template = [mesh, cog_axis, scatter_rider, scatter_horse];
+                return template;
+
+            } catch (error) {
+                console.error('Error en get_mesh:', error);
+                throw error; // Propagar el error para manejarlo en el llamador
+            }
+        }
+
+        function getCogAxis(mesh_data, cog_config) {
+            // Inicializar un objeto para almacenar los ejes
+            const originAxes = {};
+            for (const a of cog_config.axis) {
+                originAxes[a] = [];
+            }
+
+            // Iterar sobre cada entrada en cogAxis
+            for (const [o, ps] of Object.entries(cog_config.cog_axis)) {
+                if (o === 'color') continue; // Ignorar la clave 'color'
+
+                for (let i = 0; i < cog_config.axis.length; i++) {
+                    const a = cog_config.axis[i];
+                    // Crear coordenadas iniciales
+                    const coords = [Array.from(ps.origin), Array.from(ps.origin)];
+                    coords[0][i] = ps[a][0] === null ? mesh_data.min[a] : ps[a][0];
+                    coords[1][i] = ps[a][1] === null ? mesh_data.max[a] : ps[a][1];
+
+                    // Agregar las coordenadas a los ejes correspondientes
+                    for (let ii = 0; ii < cog_config.axis.length; ii++) {
+                        const aa = cog_config.axis[ii];
+                        originAxes[aa].push(coords[0][ii], coords[1][ii], null);
+                    }
+                }
+            }
+
+            // Crear el objeto Scatter3d de Plotly
+            return {
+                type: 'scatter3d',
+                mode: 'lines',
+                x: originAxes['x'],
+                y: originAxes['y'],
+                z: originAxes['z'],
+                line: {
+                    color: cog_config.cog_axis.color,
+                    width: 4
+                },
+                showlegend: false,
+                hoverinfo: 'skip'
+            };
+        }
+
+        function getAlpha(n, p = 0.6, m = 10) {
+            const x = Array.from({ length: n }, (_, i) => 0.4 + (0.9 - 0.4) * (i / (n - 1)));
+            return x.map(xi => 1 / (1 + Math.exp(-m * (xi - p))));
+        }
+
+        async function get_data_frames(url, cog_config){
+            const cog_data = await loadJson(url);
+            const win_samples = Math.floor(cog_config.win_seconds * cog_data.fs);
+            const frames = [];
+
+            for (let frameIndex = 0; frameIndex < cog_data.ts.length; frameIndex++) {
+                const endIdx = frameIndex + 1;
+                const startIdx = Math.max(0, endIdx - win_samples);
+                frames.push({
+                    rider: {
+                        x: cog_data.rider_cog.slice(startIdx, endIdx).map(p => p[0] + cog_config.cog_axis.rider.origin[0]),
+                        y: cog_data.rider_cog.slice(startIdx, endIdx).map(p => p[1] + cog_config.cog_axis.rider.origin[1]),
+                        z: cog_data.rider_cog.slice(startIdx, endIdx).map(p => p[2] + cog_config.cog_axis.rider.origin[2])
+                    },
+                    horse: {
+                        x: cog_data.horse_cog.slice(startIdx, endIdx).map(p => p[0] + cog_config.cog_axis.horse.origin[0]),
+                        y: cog_data.horse_cog.slice(startIdx, endIdx).map(p => p[1] + cog_config.cog_axis.horse.origin[1]),
+                        z: cog_data.horse_cog.slice(startIdx, endIdx).map(p => p[2] + cog_config.cog_axis.horse.origin[2])
+                    },
+                    gait: cog_data.gait.slice(startIdx, endIdx),
+                    timestamp: cog_data.ts[frameIndex],
+                    // win_samples: win_samples
+                });
+            }
+
+            return [frames, win_samples, cog_data.fs];
+        }
+
+
+        async function main() {
+            const [cog_config] = await Promise.all([
+                loadJson(cog_config_url)
+            ]);
+
+            const template = await getTemplate(mesh_url, cog_config);
+            const [frames, win_samples, fs] = await get_data_frames(cog_data_url, cog_config);
+            const alpha = getAlpha(win_samples, p = 0.6, m = 10)
+            const view_rad = cog_config.view[1] * (Math.PI / 180);
+            
+            Plotly.newPlot('plot', template, {
+                scene: { 
+                    aspectmode: 'auto',
+                    camera: {
+                        eye :{
+                            x:cog_config.view[0]*Math.cos(view_rad), 
+                            y:cog_config.view[0]*Math.sin(view_rad), 
+                            z:cog_config.view[2],
+                        }, 
+                        up     :{x: 0.0, y:0, z:0.2},
+                        center :{x:-0.1, y:0, z:0.1},
+                    },
+                },
+                // paper_bgcolor : "rgba(0,0,0,0.9)",
+                margin        :{l:0, r:0, b:0, t:0},
+            });
+
+            // Variables de control
+            let currentFrame = 0;
+            let isPlaying = false;
+            const totalFrames = frames.length;
+            let animationSpeed = (1/fs) * 1000;
+            let intervalId = null;
+
+            // Función para actualizar el gráfico
+            function updatePlot(frameIndex) {
+                const frame = frames[frameIndex];
+                const size = Array(frame.rider.x.length - 1).fill(0);
+                size.push(cog_config.msize);
+
+                const color = frame.gait.map((g, i) => {
+                    const rgbaColor = cog_config.gait_colors[g];
+                    return rgbaColor.replace('a)', `${alpha[i]})`);
+                });
+
+                Plotly.update(
+                    'plot', {
+                        x: [frame.rider.x, frame.horse.x],
+                        y: [frame.rider.y, frame.horse.y],
+                        z: [frame.rider.z, frame.horse.z],
+                        marker: {
+                            // line:{width:20},
+                            size: [...size, ...size],
+                        },
+                        line: {
+                            color: [...color, ...color],
+                            width: cog_config.line_width,
+                        },
+                    }, {}, [2, 3]
+                );
+
+                // Actualizar el texto del frame actual
+                // document.getElementById('current-frame').textContent = `Time: ${frame.timestamp.slice(0,-3)} <br>(Gait: ${frame.gait[0]})`;
+                document.getElementById('current-frame').innerHTML = `Time: ${frame.timestamp.slice(0,-3)} <br>(Gait: ${frame.gait[0]})`;
+            }
+
+            // Control Play/Pause
+            document.getElementById('play').addEventListener('click', () => {
+                if (!isPlaying) {
+                    isPlaying = true;
+                    intervalId = setInterval(playAnimation, animationSpeed);
+                }
+            });
+
+            document.getElementById('pause').addEventListener('click', () => {
+                isPlaying = false;
+                clearInterval(intervalId);
+            });
+
+            // Slider
+            const slider = document.getElementById('slider');
+            const ticksContainer = document.getElementById('ticks');
+            slider.max = totalFrames - 1;
+
+            // Generar ticks
+            const numTicks = Math.min(10, totalFrames); // Máximo 10 ticks para evitar desorden
+            const tickStep = Math.floor(totalFrames / numTicks);
+            for (let i = 0; i < totalFrames; i += tickStep) {
+                const tick = document.createElement('div');
+                tick.textContent = frames[i].timestamp.slice(0,-7); // Mostrar el timestamp o índice del frame
+                ticksContainer.appendChild(tick);
+            }
+
+            slider.addEventListener('input', (event) => {
+                currentFrame = parseInt(event.target.value);
+                updatePlot(currentFrame);
+            });
+
+            function playAnimation() {
+                if (!isPlaying) return;
+                updatePlot(currentFrame);
+                document.getElementById('slider').value = currentFrame;
+                currentFrame++;
+                if (currentFrame >= totalFrames) currentFrame = 0;
+            }
+
+            // Inicializar el gráfico
+            updatePlot(currentFrame);
+
+            // Control del menú emergente
+            const popupMenu = document.getElementById('popup-menu');
+            const menuButton = document.getElementById('menu-button');
+
+            // Mostrar/ocultar el menú emergente
+            menuButton.addEventListener('click', () => {
+                popupMenu.style.display = popupMenu.style.display === 'block' ? 'none' : 'block';
+            });
+
+            document.getElementById('speed-up').addEventListener('click', () => {
+                animationSpeed = Math.max(10, animationSpeed*0.5); // Aumentar velocidad
+                clearInterval(intervalId);
+                intervalId = setInterval(playAnimation, animationSpeed);
+                console.log(`Velocidad de animación: ${animationSpeed} ms`);
+            });
+            document.getElementById('speed-ori').addEventListener('click', () => {
+                animationSpeed = (1/fs) * 1000;
+                clearInterval(intervalId);
+                intervalId = setInterval(playAnimation, animationSpeed);
+                console.log(`Velocidad de animación: ${animationSpeed} ms; ${fs}Hz`);
+            });
+            document.getElementById('speed-down').addEventListener('click', () => {
+                animationSpeed = Math.min(500, animationSpeed*2.0); // Aumentar velocidad
+                clearInterval(intervalId);
+                intervalId = setInterval(playAnimation, animationSpeed);
+                console.log(`Velocidad de animación: ${animationSpeed} ms`);
+            });
+        }
+
+        main();
+    </script>
+</body>
+</html>
