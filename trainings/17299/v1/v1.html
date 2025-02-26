@@ -304,7 +304,8 @@
                 );
 
                 // Actualizar el texto del frame actual
-                document.getElementById('current-frame').textContent = `Time: ${frame.timestamp.slice(0,-3)}`;
+                // document.getElementById('current-frame').textContent = `Time: ${frame.timestamp.slice(0,-3)} <br>(Gait: ${frame.gait[0]})`;
+                document.getElementById('current-frame').innerHTML = `Time: ${frame.timestamp.slice(0,-3)} <br>(Gait: ${frame.gait[0]})`;
             }
 
             // Control Play/Pause

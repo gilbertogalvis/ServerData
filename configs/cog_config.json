@@ -2,10 +2,10 @@
     "msize": 12,
     "line_width": 7,
     "gait_colors": {
-        "walk"  : "rgba(220,20,60,a)",
-        "trot"  : "rgba(75,0,130,a)",
-        "gallop": "rgba(50,205,50,a)",
-        "stay"  : "rgba(255,105,180,a)"
+        "walk"  : "rgba(255,0,0,a)",
+        "trot"  : "rgba(0,0,255,a)",
+        "gallop": "rgba(0,255,0,a)",
+        "stay"  : "rgba(80,80,80,a)"
     },
     "mesh_color": "lightgray",
     "mesh_alpha": 0.15,
